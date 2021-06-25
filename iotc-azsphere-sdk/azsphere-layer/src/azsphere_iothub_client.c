@@ -96,6 +96,37 @@ static char *print_provisioning_result_string(AZURE_SPHERE_PROV_RETURN_VALUE res
     return res_str;
 }
 
+static char* print_connection_status_string(IOTHUB_CLIENT_CONNECTION_STATUS_REASON res) {
+    static char* res_str = "unknown";
+    switch (res) {
+    case IOTHUB_CLIENT_CONNECTION_EXPIRED_SAS_TOKEN:
+        res_str = "SAS token expired";
+        break;
+    case IOTHUB_CLIENT_CONNECTION_DEVICE_DISABLED:
+        res_str = "Device disabled";
+        break;
+    case IOTHUB_CLIENT_CONNECTION_BAD_CREDENTIAL:
+        res_str = "Bad credential";
+        break;
+    case IOTHUB_CLIENT_CONNECTION_RETRY_EXPIRED:
+        res_str = "Retry expired";
+        break;
+    case IOTHUB_CLIENT_CONNECTION_NO_NETWORK:
+        res_str = "No network";
+        break;
+    case IOTHUB_CLIENT_CONNECTION_COMMUNICATION_ERROR:
+        res_str = "Communication error";
+        break;
+    case IOTHUB_CLIENT_CONNECTION_OK:
+        res_str = "OK";
+        break;
+    case IOTHUB_CLIENT_CONNECTION_NO_PING_RESPONSE:
+        res_str = "No ping response";
+        break;
+    }
+    return res_str;
+}
+
 static void user_timer_cb(EventLoop* el, int fd, EventLoop_IoEvents events, void* context) {
     int idx = (int)context;
     uint64_t timerData = 0;
@@ -236,9 +267,11 @@ static IOTHUBMESSAGE_DISPOSITION_RESULT on_recv_msg_cb(IOTHUB_MESSAGE_HANDLE mes
 static void on_connect_status_cb(IOTHUB_CLIENT_CONNECTION_STATUS result,
                                  IOTHUB_CLIENT_CONNECTION_STATUS_REASON reason,
                                  void* user_context_cb) {
+
+    Log_Debug("IoTHub connection status: %s\n", print_connection_status_string(reason));
     if (result != IOTHUB_CLIENT_CONNECTION_AUTHENTICATED) {
         if (m_auth_status == StatusAuthenticated) {
-            Log_Debug("Iothub auth status => not authenticated\n");
+            Log_Debug("IoTHub auth status: Not authenticated\n");
             m_auth_status = StatusNotAuthenticated;
             if (m_timer_ctx[0].used) {
                 M_SET_TIMER_INTERVAL(1);
@@ -248,7 +281,7 @@ static void on_connect_status_cb(IOTHUB_CLIENT_CONNECTION_STATUS result,
         }
     } else {
         if (m_auth_status != StatusAuthenticated) {
-            Log_Debug("Iothub auth status => authenticated\n");
+            Log_Debug("IoTHub auth status: Authenticated\n");
             m_auth_status = StatusAuthenticated;
             M_DEL_TIMER();
         }
@@ -270,7 +303,7 @@ static void setup_azure_iot_client(void) {
     AZURE_SPHERE_PROV_RETURN_VALUE prov_res =
         IoTHubDeviceClient_LL_CreateWithAzureSphereDeviceAuthProvisioning(m_init.scope_id,
             10000, &m_client_handle);
-    Log_Debug("IoT hub provisioning result: %s\n",
+    Log_Debug("IoTHub provisioning result: %s\n",
         print_provisioning_result_string(prov_res));
     if (prov_res.result == AZURE_SPHERE_PROV_RESULT_OK) {
         m_auth_status = StatusInitiated;
