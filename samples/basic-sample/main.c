@@ -216,7 +216,6 @@ static void app_timer_handler(EventLoopTimer* timer) {
     static bool first_msg = true;
     static int telemetry_count = 0;
     static int duration_count = 0;
-    int max_count_val = 0;
 
     if (ConsumeEventLoopTimerEvent(timer) != 0) {
         exit_code = ExitCode_AppTimer_Consume;
@@ -225,23 +224,19 @@ static void app_timer_handler(EventLoopTimer* timer) {
     // Check whether the device is connected to the internet.
     if (iotconnect_sdk_is_connected()) {
 
-        if (send_telemetry_interval_s > app_poll_period_s) {
-            max_count_val = send_telemetry_interval_s / app_poll_period_s;
-        }
-        if (first_msg || telemetry_count >= max_count_val) {
+		telemetry_count += app_poll_period_s;
+		duration_count += app_poll_period_s;
+		
+        if (first_msg || (telemetry_count >= send_telemetry_interval_s)) {
             if (first_msg) {
                 first_msg = false;
             }
             SendSimulatedTelemetry();
             telemetry_count = 0;
-        } else {
-            telemetry_count++;
         }
         if (duration_count >= stay_connected_duration_s) {
             //Times up. Stop sending.
             exit_code = ExitCode_TermHandler_SigTerm;
-        } else {
-            duration_count++;
         }
     }
 }
