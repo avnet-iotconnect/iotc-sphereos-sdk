@@ -7,11 +7,9 @@
 #ifndef IOTCONNECT_H
 #define IOTCONNECT_H
 
-//#include <stddef.h>
-//#include <applibs/log.h>
-//#include "iotconnect_common.h"
-//#include "iotconnect_event.h"
-//#include "iotconnect_telemetry.h"
+#include "iotconnect_common.h"
+#include "iotconnect_event.h"
+#include "iotconnect_telemetry.h"
 #include "iotconnect_lib.h"
 
 #ifdef __cplusplus
@@ -20,9 +18,10 @@ extern "C" {
 
 #define IOTC_SDK_SUCCESS                          0
 #define IOTC_SDK_IOTHUB_INIT_FAIL                 1
-#define IOTC_SDK_IOTCONNECT_INT_FAIL              2
+#define IOTC_SDK_IOTCONNECT_INIT_FAIL             2
 #define IOTC_SDK_CONNECT_INIT_FAIL                3
 #define IOTC_SDK_RUN_FAIL                         4
+#define IOTC_SDK_INVALID_STATE                    5
 
 typedef enum {
     UNDEFINED,
