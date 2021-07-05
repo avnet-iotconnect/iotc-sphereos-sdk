@@ -47,5 +47,6 @@ IotHubTimerCallback timer_cb, void* p_ctx, int *p_timer_handle);
 IotHubClientReturnCode iothub_client_get_timer_interval(int timer_handle, int *p_interval);
 IotHubClientReturnCode iothub_client_set_timer_interval(int timer_handle, int interval_s);
 IotHubClientReturnCode iothub_client_delete_timer(int timer_handle);
+IotHubClientReturnCode iothub_client_uninit(void);
 
 #endif //AZSPHERE_IOTHUB_CLIENT_H
