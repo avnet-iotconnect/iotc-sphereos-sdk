@@ -16,9 +16,9 @@ typedef enum {
 
     ExitCode_Init_EventLoop = 30,
     ExitCode_Init_IotConnect_Sdk = 31,
-    ExitCode_Init_AppTimer = 32,
 
-    ExitCode_AppTimer_Consume = 40,
+    ExitCode_Create_AppTimer = 40,
+    ExitCode_AppTimer_Consume = 41,
 
     ExitCode_Main_EventLoopFail = 50,
 
