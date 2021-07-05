@@ -58,8 +58,6 @@
 #include "iotConnect.h"
 #include "exit_codes.h"
 
-#define TELEMETRY_BUFFER_SIZE       256
-
 typedef enum {
 
     connection_type_dps,
@@ -73,17 +71,18 @@ static connection_type_t connection_type;
 static char *scope_id = NULL;  // ScopeId for DPS.
 static char *hostname = NULL;
 static char* iotedge_root_ca_path = NULL; // Path (including filename) of the IotEdge cert.
-static const char network_interface[] = "wlan0";
+static const char network_interface[] = "wlan0"; //change to "eth0" for Guardian 700.
 EventLoop *app_evt_loop = NULL;
 static EventLoopTimer *app_timer = NULL;
 static const int send_telemetry_interval_s = 5;         // only send telemetry 1/5 of polls
 static const int stay_connected_duration_s = (5 * 60);
 static int app_poll_period_s = 1;
+IotConnectClientConfig *iotconnect_cfg = NULL;
 
 /// <summary>
 ///     Signal handler for termination requests. This handler must be async-signal-safe.
 /// </summary>
-static void TerminationHandler(int signalNumber) {
+static void termination_handler(int signalNumber) {
     // Don't use Log_Debug here, as it is not guaranteed to be async-signal-safe.
     exit_code = ExitCode_TermHandler_SigTerm;
 }
@@ -145,7 +144,7 @@ static void parse_cmdline_args(int argc, char* argv[]) {
 ///     ExitCode_Success if the parameters were provided; otherwise another
 ///     ExitCode value which indicates the specific failure.
 /// </returns>
-static ExitCode ValidateUserConfiguration(void) {
+static ExitCode validate_user_configuration(void) {
     ExitCode validation_exit_code = ExitCode_Success;
 
     if (connection_type != connection_type_dps) {
@@ -167,7 +166,7 @@ static ExitCode ValidateUserConfiguration(void) {
 /// <summary>
 ///     Generate simulated telemetry and send to IoTConnect.
 /// </summary>
-void SendSimulatedTelemetry(void) {
+static void send_simulated_telemetry(void) {
     // Generate a simulated temperature.
     static float temperature = 50.0f;
     // Generate a simulated humidity.
@@ -221,23 +220,43 @@ static void app_timer_handler(EventLoopTimer* timer) {
         exit_code = ExitCode_AppTimer_Consume;
         return;
     }
-    // Check whether the device is connected to the internet.
-    if (iotconnect_sdk_is_connected()) {
+    telemetry_count += app_poll_period_s;
+    duration_count += app_poll_period_s;
+    if (first_msg || (telemetry_count >= send_telemetry_interval_s)) {
+        if (first_msg) {
+            first_msg = false;
+        }
+        send_simulated_telemetry();
+        telemetry_count = 0;
+    }
+    if (duration_count >= stay_connected_duration_s) {
+        //Times up. Stop sending.
+        exit_code = ExitCode_TermHandler_SigTerm;
+    }
+}
 
-		telemetry_count += app_poll_period_s;
-		duration_count += app_poll_period_s;
-		
-        if (first_msg || (telemetry_count >= send_telemetry_interval_s)) {
-            if (first_msg) {
-                first_msg = false;
+static void on_iotconnect_status_cb(IotConnectConnectionStatus data) {
+    switch (data) {
+    case IOTCONNECT_CONNECTED:
+        Log_Debug("IoTConnect client connected\n");
+        if (app_timer == NULL) {
+            struct timespec ts = { .tv_sec = app_poll_period_s, .tv_nsec = 0 };
+            app_timer = CreateEventLoopPeriodicTimer(app_evt_loop, &app_timer_handler, &ts);
+            if (app_timer == NULL) {
+                exit_code = ExitCode_Create_AppTimer;
+                return;
             }
-            SendSimulatedTelemetry();
-            telemetry_count = 0;
         }
-        if (duration_count >= stay_connected_duration_s) {
-            //Times up. Stop sending.
-            exit_code = ExitCode_TermHandler_SigTerm;
+        break;
+    case IOTCONNECT_DISCONNECTED:
+        Log_Debug("IoTConnect client disconnected\n");
+        if (app_timer) {
+            DisposeEventLoopTimer(app_timer);
+            app_timer = NULL;
         }
+        break;
+    default:
+        Log_Debug("IoTConnect client ERROR\n");
     }
 }
 
@@ -248,10 +267,10 @@ static void app_timer_handler(EventLoopTimer* timer) {
 ///     ExitCode_Success if all resources were allocated successfully; otherwise another
 ///     ExitCode value which indicates the specific failure.
 /// </returns>
-static ExitCode InitPeripheralsAndHandlers(void) {
+static ExitCode init_peripherals_and_handlers(void) {
     struct sigaction action;
     memset(&action, 0, sizeof(struct sigaction));
-    action.sa_handler = TerminationHandler;
+    action.sa_handler = termination_handler;
     sigaction(SIGTERM, &action, NULL);
 
     app_evt_loop = EventLoop_Create();
@@ -259,16 +278,13 @@ static ExitCode InitPeripheralsAndHandlers(void) {
         Log_Debug("Could not create event loop.\n");
         return ExitCode_Init_EventLoop;
     }
-    struct timespec ts = { .tv_sec = app_poll_period_s, .tv_nsec = 0 };
-    app_timer = CreateEventLoopPeriodicTimer(app_evt_loop, &app_timer_handler, &ts);
-    if (app_timer == NULL) {
-        return ExitCode_Init_AppTimer;
-    }
-    IotConnectAzsphereConfig iotconnect_cfg = {
+    iotconnect_cfg = iotconnect_sdk_init_and_get_config();
+    iotconnect_cfg->status_cb = on_iotconnect_status_cb;
+    IotConnectAzsphereConfig iotconnect_init = {
         .p_netif = network_interface,
         .p_scope_id = scope_id
     };
-    if (iotconnect_sdk_init(&iotconnect_cfg) != 0) {
+    if (iotconnect_sdk_init(&iotconnect_init) != 0) {
         return ExitCode_Init_IotConnect_Sdk;
     }
     return ExitCode_Success;
@@ -277,7 +293,7 @@ static ExitCode InitPeripheralsAndHandlers(void) {
 /// <summary>
 /// ....Close peripherals and handlers.
 /// </summary>
-static void ClosePeripheralsAndHandlers(void) {
+static void close_peripherals_and_handlers(void) {
     iotconnect_sdk_disconnect();
     DisposeEventLoopTimer(app_timer);
     EventLoop_Close(app_evt_loop);
@@ -289,11 +305,11 @@ static void ClosePeripheralsAndHandlers(void) {
 int main(int argc, char *argv[]) {
     Log_Debug("Azure Sphere basic sample starting.\n");
     parse_cmdline_args(argc, argv);
-    exit_code = ValidateUserConfiguration();
+    exit_code = validate_user_configuration();
     if (exit_code != ExitCode_Success) {
         return exit_code;
     }
-    exit_code = InitPeripheralsAndHandlers();
+    exit_code = init_peripherals_and_handlers();
 
     // Main loop
     while (exit_code == ExitCode_Success) {
@@ -306,7 +322,7 @@ int main(int argc, char *argv[]) {
             exit_code = ExitCode_IotConnect_Sdk_EventLoopFail;
         }
     }
-    ClosePeripheralsAndHandlers();
+    close_peripherals_and_handlers();
     Log_Debug("Application exiting.\n");
     return exit_code;
 }
