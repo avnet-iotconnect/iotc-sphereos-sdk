@@ -31,7 +31,7 @@ static int timer_hndl = 0;
 /* Helper functions definition                                                              */
 /********************************************************************************************/
 static void send_hello_msg(void) {
-    Log_Debug("send hello message to iotconnect...\n");
+    Log_Debug("Sending hello message to iotconnect...\n");
     strcpy(sid_str, "");
     strcpy(dtg_str, "");
     char* hello_request = iotcl_request_create_hello();
@@ -47,6 +47,7 @@ static void on_timer_cb(void* p_ctx) {
         send_hello_msg();
     } else {
         iothub_client_delete_timer(timer_hndl);
+        timer_hndl = 0;
     }
 }
 
@@ -75,6 +76,10 @@ static void on_iotconnect_status(IotHubAuthenticateStatus status) {
     } else {
         iothub_authenticated = false;
         iotconnect_connected = false;
+        if (timer_hndl) {
+            iothub_client_delete_timer(timer_hndl);
+            timer_hndl = 0;
+        }
         if (config.status_cb) {
             config.status_cb(IOTCONNECT_DISCONNECTED);
         }
@@ -114,7 +119,6 @@ static void on_hello_response(IotclEventData data, IotclEventType type) {
             Log_Debug("Error from hello response. SID is null.\n");
         }
         if (strlen(lib_config.request.sid) > 0 && strlen(lib_config.telemetry.dtg) > 0) {
-            Log_Debug("connected to iotconnect.\n");
             iotconnect_connected = true;
             if (config.status_cb) {
                 config.status_cb(IOTCONNECT_CONNECTED);
@@ -133,17 +137,19 @@ static void on_hello_response(IotclEventData data, IotclEventType type) {
 void iotconnect_sdk_disconnect() {
     Log_Debug("Disconnecting...\n");
     iothub_client_disconnect();
-    iothub_authenticated = false;
-    iotconnect_connected = false;
-    if (config.status_cb) {
+    if (iotconnect_connected && config.status_cb) {
         config.status_cb(IOTCONNECT_DISCONNECTED);
     }
+    iothub_authenticated = false;
+    iotconnect_connected = false;
 }
 
 void iotconnect_sdk_send_packet(const char *data) {
-    if (iothub_client_send_message(data, "application%2fjson", "utf-8") != 
-        CodeSuccess) {
-        Log_Debug("Failed to send message: %s\n", data);
+    if (iothub_authenticated) {
+        if (iothub_client_send_message(data, "application%2fjson", "utf-8") !=
+            CodeSuccess) {
+            Log_Debug("Failed to send message: %s\n", data);
+        }
     }
 }
 
@@ -171,6 +177,10 @@ unsigned int iotconnect_sdk_poll(int timeout_ms) {
 // this the Initialization on IoTConnect SDK
 unsigned int iotconnect_sdk_init(IotConnectAzsphereConfig *p_cfg) {
     IotHubClientInit iothub_cli_init;
+    if (iotconnect_connected) {
+        return IOTC_SDK_INVALID_STATE;
+    }
+    iothub_client_uninit();
     strcpy(iothub_cli_init.netif, p_cfg->p_netif);
     strcpy(iothub_cli_init.scope_id, p_cfg->p_scope_id);
     iothub_cli_init.recv_msg_cb = on_iothub_data;
@@ -192,7 +202,7 @@ unsigned int iotconnect_sdk_init(IotConnectAzsphereConfig *p_cfg) {
     lib_config.request.sid = sid_str;
     if (!iotcl_init(&lib_config)) {
         Log_Debug("Failed to initialize the IoTConnect Lib\n");
-        return IOTC_SDK_IOTCONNECT_INT_FAIL;
+        return IOTC_SDK_IOTCONNECT_INIT_FAIL;
     }
     if (iothub_client_connect() != CodeSuccess) {
         Log_Debug("Failed to connect!\n");
