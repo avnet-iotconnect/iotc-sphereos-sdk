@@ -64,6 +64,7 @@ static IotHubClientInit m_init = { 0 };
 static EventLoop* m_evt_loop = NULL;
 static IotHubAuthenticateStatus m_auth_status = StatusNotAuthenticated;
 static TimerContext m_timer_ctx[MAX_TIMERS];
+static bool m_initialized = false;
 
 /******************************************************/
 /* Helper functions definition                        */
@@ -186,13 +187,13 @@ static int add_timer(int interval_s, IotHubTimerCallback timer_cb, void* p_ctx,
 
 static int get_timer_interval(int timer_handle, bool internal_use) {
     int idx = timer_handle - 1;
-    if (idx == 0 && !internal_use) {
+    if (internal_use) {
+        idx = 0;
+    } else if ((idx <= 0) || (idx > M_ARRAY_SIZE(m_timer_ctx))) {
+        Log_Debug("Invalid timer_handle!\n");
         return -1;
     }
-    if (internal_use){
-        idx = 0;
-    }
-    if (idx >= 0 && m_timer_ctx[idx].used) {
+    if (m_timer_ctx[idx].used) {
         return m_timer_ctx[idx].interval_s;
     }
     return -1;
@@ -200,13 +201,13 @@ static int get_timer_interval(int timer_handle, bool internal_use) {
 
 static bool set_timer_interval(int timer_handle, int interval_s, bool internal_use) {
     int idx = timer_handle - 1;
-    if (idx == 0 && !internal_use) {
-        return false;
-    }
     if (internal_use) {
         idx = 0;
+    } else if ((idx <= 0) || (idx > M_ARRAY_SIZE(m_timer_ctx))) {
+        Log_Debug("Invalid timer_handle!\n");
+        return false;
     }
-    if (idx >= 0 && m_timer_ctx[idx].used) {
+    if (m_timer_ctx[idx].used) {
         struct timespec ts = { .tv_sec = interval_s, .tv_nsec = 0 };
         struct itimerspec newValue = { .it_value = ts,
                                       .it_interval = ts };
@@ -223,13 +224,13 @@ static bool set_timer_interval(int timer_handle, int interval_s, bool internal_u
 
 static void delete_timer(int timer_handle, bool internal_use) {
     int idx = timer_handle - 1;
-    if (idx == 0 && !internal_use) {
-        return;
-    }
     if (internal_use) {
         idx = 0;
+    } else if ((idx <= 0) || (idx > M_ARRAY_SIZE(m_timer_ctx))) {
+        Log_Debug("Invalid timer_handle!\n");
+        return;
     }
-    if (idx >= 0 && m_timer_ctx[idx].used) {
+    if (m_timer_ctx[idx].used) {
         EventLoop_UnregisterIo(m_evt_loop, m_timer_ctx[idx].evt_reg);
         close(m_timer_ctx[idx].timer_fd);
         m_timer_ctx[idx].used = false;
@@ -283,7 +284,6 @@ static void on_connect_status_cb(IOTHUB_CLIENT_CONNECTION_STATUS result,
         if (m_auth_status != StatusAuthenticated) {
             Log_Debug("IoTHub auth status: Authenticated\n");
             m_auth_status = StatusAuthenticated;
-            M_DEL_TIMER();
         }
     }
     if (m_init.auth_status_cb) {
@@ -315,28 +315,48 @@ static void setup_azure_iot_client(void) {
 }
 
 static void iothub_poll_handler(void *p_ctx) {
-    bool isNetworkingReady = false;
+    bool is_networking_ready = false;
+    bool need_report = false;
     if (M_GET_TIMER_INTERVAL() == 1) {
         M_SET_TIMER_INTERVAL(IOTHUB_POLL_INTERVAL_S);
     }
-    if ((Networking_IsNetworkingReady(&isNetworkingReady) == -1) || !isNetworkingReady) {
-        Log_Debug("WARNING: Network is not ready. Device cannot connect until network is ready.\n");
-        return;
+    if ((Networking_IsNetworkingReady(&is_networking_ready) == -1) || !is_networking_ready) {
+        if (m_auth_status == StatusAuthenticated) {
+            m_auth_status = StatusNotAuthenticated;
+            need_report = true;
+            Log_Debug("WARNING: Network down. Device need to re-authenticate when network is up.\n");
+        } else {
+            Log_Debug("WARNING: Network is not ready. Device cannot connect until network is ready.\n");
+        }
+        goto handler_end;
     }
     Networking_InterfaceConnectionStatus status;
     if (Networking_GetInterfaceConnectionStatus(m_init.netif, &status) == 0) {
-        if ((status & Networking_InterfaceConnectionStatus_ConnectedToInternet) &&
-            (m_auth_status == StatusNotAuthenticated)) {
-            setup_azure_iot_client();
-        }
-    } else {
-        if (errno != EAGAIN) {
-            Log_Debug("ERROR: Networking_GetInterfaceConnectionStatus: %d (%s)\n", errno,
-                strerror(errno));
-            if (m_init.auth_status_cb) {
-                m_init.auth_status_cb(StatusInitiateError);
+        if (status & Networking_InterfaceConnectionStatus_ConnectedToInternet) {
+            if (m_auth_status == StatusNotAuthenticated) {
+                setup_azure_iot_client();
+            }
+        } else {
+            if (m_auth_status == StatusAuthenticated) {
+                m_auth_status = StatusNotAuthenticated;
+                need_report = true;
             }
         }
+    } else {
+        if (m_auth_status == StatusAuthenticated) {
+            m_auth_status = StatusNotAuthenticated;
+            need_report = true;
+        }
+        if (errno != EAGAIN) {
+            m_auth_status = StatusInitiateError;
+            need_report = true;
+            Log_Debug("ERROR: Networking_GetInterfaceConnectionStatus: %d (%s)\n", errno,
+                strerror(errno));
+        }
+    }
+handler_end:
+    if (need_report && m_init.auth_status_cb) {
+        m_init.auth_status_cb(m_auth_status);
     }
 }
 
@@ -345,32 +365,47 @@ static void iothub_poll_handler(void *p_ctx) {
 /********************************************************************************************/
 
 IotHubClientReturnCode iothub_client_init(IotHubClientInit *p_init) {
+
+    if (m_initialized) {
+        return CodeInvalidState;
+    }
     if (!p_init) {
         return CodeInvalidParam;
     }
     memcpy(&m_init, p_init, sizeof(IotHubClientInit));
+    if (m_evt_loop) {
+        EventLoop_Close(m_evt_loop);
+    }
+    m_evt_loop = EventLoop_Create();
+    if (m_evt_loop == NULL) {
+        return CodeResourceNotAvailable;
+    }
     for (int i = 0; i < M_ARRAY_SIZE(m_timer_ctx); i++)    {
         m_timer_ctx[i].used = false;
     }
+    m_initialized = true;
     return CodeSuccess;
 }
 
 IotHubClientReturnCode iothub_client_connect(void) {
-    if (m_evt_loop != NULL)    {
+    if (!m_initialized || (m_auth_status == StatusAuthenticated)) {
         return CodeInvalidState;
     }
-    m_evt_loop = EventLoop_Create();
     if (m_evt_loop == NULL)    {
         return CodeResourceNotAvailable;
     }
-    M_ADD_TIMER(1);
+    if (m_timer_ctx[0].used) {
+        M_SET_TIMER_INTERVAL(1);
+    } else {
+        M_ADD_TIMER(1);
+    }
     return CodeSuccess;
 }
 
 IotHubClientReturnCode iothub_client_send_message(const char* p_msg,
     const char* p_content_type, const char* p_content_encoding) {
     IOTHUB_MESSAGE_HANDLE msg_handle;
-    if (m_auth_status != StatusAuthenticated) {
+    if (!m_initialized || (m_auth_status != StatusAuthenticated)) {
         return CodeInvalidState;
     }
     //Log_Debug("msg => %s\n", p_msg);
@@ -392,10 +427,9 @@ IotHubClientReturnCode iothub_client_send_message(const char* p_msg,
 }
 
 IotHubClientReturnCode iothub_client_run(int timeout_ms) {
-    if (m_evt_loop == NULL) {
+    if (!m_initialized || (m_evt_loop == NULL)) {
         return CodeInvalidState;
-    }
-    if (m_evt_loop != NULL) {
+    } else {
         EventLoop_Run_Result result = EventLoop_Run(m_evt_loop, timeout_ms, true);
         // Continue if interrupted by signal, e.g. due to breakpoint being set.
         if (result == EventLoop_Run_Failed && errno != EINTR) {
@@ -409,24 +443,22 @@ IotHubClientReturnCode iothub_client_run(int timeout_ms) {
 }
 
 IotHubClientReturnCode iothub_client_disconnect(void) {
+    if (!m_initialized) {
+        return CodeInvalidState;
+    }
     if (m_client_handle) {
         IoTHubDeviceClient_LL_Destroy(m_client_handle);
         m_client_handle = NULL;
-    }
-    if (m_evt_loop) {
-        for (int i = 0; i < M_ARRAY_SIZE(m_timer_ctx); i++)    {
-            if (m_timer_ctx[i].used) {
-                iothub_client_delete_timer(i + 1);
-            }
-        }
-        EventLoop_Close(m_evt_loop);
-        m_evt_loop = NULL;
+        m_auth_status = StatusNotAuthenticated;
     }
     return CodeSuccess;
 }
 
 IotHubClientReturnCode iothub_client_add_timer(int interval_s, IotHubTimerCallback timer_cb,
     void *p_ctx, int *p_timer_handle) {
+    if (!m_initialized) {
+        return CodeInvalidState;
+    }
     int hndl = add_timer(interval_s, timer_cb, p_ctx, false);
     if (hndl == 0) {
         return CodeResourceNotAvailable;
@@ -436,6 +468,9 @@ IotHubClientReturnCode iothub_client_add_timer(int interval_s, IotHubTimerCallba
 }
 
 IotHubClientReturnCode iothub_client_get_timer_interval(int timer_handle, int *p_interval) {
+    if (!m_initialized) {
+        return CodeInvalidState;
+    }
     int interval = get_timer_interval(timer_handle, false);
     if (interval == -1) {
         return CodeResourceNotAvailable;
@@ -445,6 +480,9 @@ IotHubClientReturnCode iothub_client_get_timer_interval(int timer_handle, int *p
 }
 
 IotHubClientReturnCode iothub_client_set_timer_interval(int timer_handle, int interval_s) {
+    if (!m_initialized) {
+        return CodeInvalidState;
+    }
     if (set_timer_interval(timer_handle, interval_s, false) == false) {
         return CodeResourceNotAvailable;
     }
@@ -452,7 +490,26 @@ IotHubClientReturnCode iothub_client_set_timer_interval(int timer_handle, int in
 }
 
 IotHubClientReturnCode iothub_client_delete_timer(int timer_handle) {
+    if (!m_initialized) {
+        return CodeInvalidState;
+    }
     delete_timer(timer_handle, false);
     return CodeSuccess;
 }
 
+IotHubClientReturnCode iothub_client_uninit(void) {
+    if (!m_initialized || m_client_handle) {
+        return CodeInvalidState;
+    }
+    if (m_evt_loop) {
+        for (int i = 0; i < M_ARRAY_SIZE(m_timer_ctx); i++) {
+            if (m_timer_ctx[i].used) {
+                iothub_client_delete_timer(i + 1);
+            }
+        }
+        EventLoop_Close(m_evt_loop);
+        m_evt_loop = NULL;
+    }
+    m_initialized = false;
+    return CodeSuccess;
+}
