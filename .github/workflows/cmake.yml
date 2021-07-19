@@ -1,0 +1,20 @@
+name: Project Packages
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup Projects
+        run: |
+          bash -x ./scripts/setup-project.sh
+      #use wildcards so that directory path is preserved.
+      - name: Publish Azure Sphere OS SDK Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: iotc-sphereos-sdk
+          path: .
