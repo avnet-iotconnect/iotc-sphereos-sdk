@@ -18,7 +18,7 @@ Download the project files from Github Actions in this repo.
 
 See the [BUILD_INSTRUCTIONS](BUILD_INSTRUCTIONS.md) page for details on setting up the Azure Sphere development eniviroment and build/debug an Azure Sphere project.
 
-## Port the samples to Guardian 700 hardware
+## Porting the samples to Guardian 700 hardware
 Follow the steps below to port the sample's project to Guardian 700 hardware:
 - In app_manifest.json file, add line ***"NetworkConfig": true*** to the ***Capabilities*** section.
 - In CMakeLists.txt file, replace the definition of ***TARGET_DIRECTORY*** from ***"../../hardware-definitions/mt3620_rdb"*** to ***"../../hardware-definitions/techware_mt3620_slte"*** in azsphere_target_hardware_definition() macro. 
