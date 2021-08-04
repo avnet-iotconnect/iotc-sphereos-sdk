@@ -1,0 +1,7 @@
+[submodule "iotc-azsphere-sdk/iotc-c-lib"]
+	path = iotc-azsphere-sdk/iotc-c-lib
+	url = git://github.com/Avnet/iotc-c-lib.git
+	branch = protocol-2.0
+[submodule "iotc-azsphere-sdk/cJSON"]
+	path = iotc-azsphere-sdk/cJSON
+	url = git://github.com/DaveGamble/cJSON.git
