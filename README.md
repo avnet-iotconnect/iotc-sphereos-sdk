@@ -15,7 +15,7 @@ Please also see the Codethink, MediaTek, and Azure RTOS repositories for more sa
 See the [Azure Sphere Getting Started](https://www.microsoft.com/en-us/azure-sphere/get-started/) page for details on getting an [Azure Sphere development kit](https://aka.ms/AzureSphereHardware) and setting up your PC for development. You should complete the Azure Sphere [Installation Quickstarts](https://docs.microsoft.com/azure-sphere/install/overview) and [Tutorials](https://docs.microsoft.com/azure-sphere/install/qs-overview) to validate that your environment is configured properly before using the samples here. 
 
 ## Download or clone the samples
-- You can download the ZIP release *iotc-sphereos-sdk-full.zip* from this repository Release page.
+- You can download the ZIP release *iotc-sphereos-sdk-full.zip* from this repository Releases page.
 - Or you can clone the full samples source code from this repository:
   - install Git Client from https://git-scm.com/downloads onto your development PC.
   - Open a console and clone the complete samples repo to your development PC with the following command:
