@@ -3,10 +3,10 @@
   "Name": "basic-simple",
   "ComponentId": "778C1A77-E47F-40DE-8DED-0CCAAA15293E",
   "EntryPoint": "/bin/app",
-  "CmdArgs": [ "--ConnectionType", "DPS", "--ScopeID", "0ne001DB429" ],
+  "CmdArgs": [ "--ConnectionType", "DPS", "--ScopeID", "" ],
   "Capabilities": {
-    "AllowedConnections": [ "global.azure-devices-provisioning.net", "poc-iotc-sphere-iothub-eu.azure-devices.net" ],
-    "DeviceAuthentication": "a1f2636f-3b30-4dcf-9f71-ab3cfb4975c2"
+    "AllowedConnections": [ "global.azure-devices-provisioning.net"],
+    "DeviceAuthentication": ""
   },
   "ApplicationType": "Default"
 }
