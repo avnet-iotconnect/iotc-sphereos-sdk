@@ -21,7 +21,7 @@ See the [Azure Sphere Getting Started](https://www.microsoft.com/en-us/azure-sph
   - Open a console and clone the complete samples repo to your development PC with the following command:
     - *git clone --depth 1 --recurse-submodules git://github.com/avnet-iotconnect/iotc-sphereos-sdk.git*
 
-## Update the following information to the project manifest.json *(eg: C:\Projects\iotc-sphereos-sdk\samples\basic-samples\manifest.json)*
+## Update the following information to the project app_manifest.json *(eg: C:\Projects\iotc-sphereos-sdk\samples\basic-samples\app_manifest.json)*
 - Scope ID *(get from IotConnect Web UI under Settings->Key Vault->DPS Info)*
 - Assoicated Hub *(get from IotConnect Web UI under Settings->Key Vault->DPS Info)*
 - Device Authentication *(Tenant ID)*
