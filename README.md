@@ -21,6 +21,11 @@ See the [Azure Sphere Getting Started](https://www.microsoft.com/en-us/azure-sph
   - Open a console and clone the complete samples repo to your development PC with the following command:
     - *git clone --depth 1 --recurse-submodules git://github.com/avnet-iotconnect/iotc-sphereos-sdk.git*
 
+## Update the following information to the project manifest.json *(eg: C:\Projects\iotc-sphereos-sdk\samples\basic-samples\manifest.json)*
+- Scope ID *(get from IotConnect Web UI under Settings->Key Vault->DPS Info)*
+- Assoicated Hub *(get from IotConnect Web UI under Settings->Key Vault->DPS Info)*
+- Device Authentication *(Tenant ID)*
+ 
 ## Open and build the samples with Microsoft Visual Studio 
 - Launch Visual Studio and open a sample project folder. *(eg: C:\projects\iotc-sphereos-sdk\samples\basic-sample)*
 - The Visual Studio should auto generate cmake cache when sample project folder is opened. If not, right-click on the *CMakeLists.txt* from the **Solution Explorer** panel and select **Generate cache for xxxx-sample** where *xxxx-sample* is the project name of the sample project folder that is opened. *(eg: basic-sample)*
