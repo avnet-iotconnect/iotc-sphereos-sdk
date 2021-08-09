@@ -15,8 +15,8 @@ Please also see the Codethink, MediaTek, and Azure RTOS repositories for more sa
 See the [Azure Sphere Getting Started](https://www.microsoft.com/en-us/azure-sphere/get-started/) page for details on getting an [Azure Sphere development kit](https://aka.ms/AzureSphereHardware) and setting up your PC for development. You should complete the Azure Sphere [Installation Quickstarts](https://docs.microsoft.com/azure-sphere/install/overview) and [Tutorials](https://docs.microsoft.com/azure-sphere/install/qs-overview) to validate that your environment is configured properly before using the samples here. 
 
 ## Download or clone the samples
-- You can download the samples zip release from this repository Release page or clone it to your development PC.
-- To clone the samples repository:
+- You can download the ZIP file *iotc-sphereos-sdk-full_vX.XX.zip* where *X.XX* is the release version from this repository Release page.
+- Or you can clone the full samples source code from this repository:
   - install Git Client from https://git-scm.com/downloads onto your development PC.
   - Open a console and clone the complete samples repo to your development PC with the following command:
     - *git clone --depth 1 --recurse-submodules git://github.com/avnet-iotconnect/iotc-sphereos-sdk.git*
