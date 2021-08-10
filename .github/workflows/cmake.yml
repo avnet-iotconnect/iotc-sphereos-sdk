@@ -11,7 +11,7 @@ jobs:
 
       - name: Setup Projects
         run: |
-          bash -x ./scripts/setup-project.sh
+          git submodule update --init --recursive
       #use wildcards so that directory path is preserved.
       - name: Publish Azure Sphere OS SDK Artifacts
         uses: actions/upload-artifact@v2
