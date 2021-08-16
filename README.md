@@ -22,9 +22,9 @@ See the [Azure Sphere Getting Started](https://www.microsoft.com/en-us/azure-sph
     - *git clone --depth 1 --recurse-submodules git://github.com/avnet-iotconnect/iotc-sphereos-sdk.git*
 
 ## Update the following information in app_manifest.json *(eg: C:\Projects\iotc-sphereos-sdk\samples\basic-samples\app_manifest.json)*
-- "CmdArgs": ["--ScopeID:, "*Your-Azure-Sphere-ScopeID*"] *(get from IotConnect Web UI under Settings->Key Vault->DPS Info)*
-- Add *Your-Azure-Sphere-Associated-Hub* URL to "AllowedConnection" section. *(get from IotConnect Web UI under Settings->Key Vault->DPS Info)*
-- "DeviceAuthentication": "*Your-Tenant-ID*". *(Tenant ID)*
+- "CmdArgs": ["--ScopeID: "**Your-Azure-Sphere-ScopeID**"] *(get from IotConnect Web UI under Settings->Key Vault->DPS Info)*
+- Add **Your-Azure-Sphere-Associated-Hub** URL to "AllowedConnection" section. *(get from IotConnect Web UI under Settings->Key Vault->DPS Info)*
+- "DeviceAuthentication": "**Your-Tenant-ID**". *(get from command: azsphere tenant show-selected)*
  
 ## Open and build the samples with Microsoft Visual Studio 
 - Launch Visual Studio and open a sample project folder. *(eg: C:\projects\iotc-sphereos-sdk\samples\basic-sample)*
