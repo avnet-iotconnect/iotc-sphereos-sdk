@@ -180,7 +180,6 @@ unsigned int iotconnect_sdk_init(IotConnectAzsphereConfig *p_cfg) {
     if (iotconnect_connected) {
         return IOTC_SDK_INVALID_STATE;
     }
-    iothub_client_uninit();
     strcpy(iothub_cli_init.netif, p_cfg->p_netif);
     strcpy(iothub_cli_init.scope_id, p_cfg->p_scope_id);
     iothub_cli_init.recv_msg_cb = on_iothub_data;
