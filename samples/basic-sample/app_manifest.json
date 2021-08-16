@@ -3,9 +3,9 @@
   "Name": "basic-simple",
   "ComponentId": "778C1A77-E47F-40DE-8DED-0CCAAA15293E",
   "EntryPoint": "/bin/app",
-  "CmdArgs": [ "--ConnectionType", "DPS", "--ScopeID", "" ],
+  "CmdArgs": [ "--ScopeID", "" ],
   "Capabilities": {
-    "AllowedConnections": [ "global.azure-devices-provisioning.net"],
+    "AllowedConnections": [ "global.azure-devices-provisioning.net" ],
     "DeviceAuthentication": ""
   },
   "ApplicationType": "Default"
