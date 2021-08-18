@@ -1,25 +1,12 @@
 ﻿/* Copyright (c) Microsoft Corporation. All rights reserved.
    Licensed under the MIT License. */
-
-// This sample C application demonstrates how to interface Azure Sphere devices with Azure IoT
-// services. Using the Azure IoT SDK C APIs, it shows how to:
-// 1. Use Device Provisioning Service (DPS) to connect to Azure IoT Hub/Central with
-// certificate-based authentication
-// 2. Use X.509 Certificate Authority (CA) certificates to authenticate devices connecting directly
-// to Azure IoT Hub
-// 3. Use X.509 Certificate Authority (CA) certificates to authenticate devices connecting to an
-// IoT Edge device.
-// 4. Use Azure IoT Hub messaging to upload simulated temperature measurements and to signal button
-// press events
-// 5. Use Device Twin to receive desired LED state from the Azure IoT Hub
-// 6. Use Direct Methods to receive a "Trigger Alarm" command from Azure IoT Hub/Central
 //
-// It uses the following Azure Sphere libraries:
-// - eventloop (system invokes handlers for timer events)
-// - gpio (digital input for button, digital output for LED)
-// - log (displays messages in the Device Output window during debugging)
-// - networking (network interface connection status)
-// - storage (device storage interaction)
+// Copyright: Avnet 2021
+// Modified by Alan Low <alan.low@avnet.com> on 8/16/21.
+//
+// This sample C application demonstrates how to interface Azure Sphere devices with IoTConnect
+// services. Using the IoTConnect C SDK for Azure Sphere, it shows how to use Device Provisioning
+// Service (DPS) to connect to IoTConnect with certificate-based authentication.
 //
 // You will need to provide information in the 'CmdArgs' section of the application manifest to
 // use this application. Please see README.md for full details.
@@ -58,19 +45,8 @@
 #include "iotConnect.h"
 #include "exit_codes.h"
 
-typedef enum {
-
-    connection_type_dps,
-    connection_type_direct,
-    connection_type_iotedge
-
-} connection_type_t;
-
 volatile sig_atomic_t exit_code = ExitCode_Success;
-static connection_type_t connection_type;
 static char *scope_id = NULL;  // ScopeId for DPS.
-static char *hostname = NULL;
-static char* iotedge_root_ca_path = NULL; // Path (including filename) of the IotEdge cert.
 static const char network_interface[] = "wlan0"; //change to "eth0" for Guardian 700.
 EventLoop *app_evt_loop = NULL;
 static EventLoopTimer *app_timer = NULL;
@@ -93,43 +69,20 @@ static void termination_handler(int signalNumber) {
 static void parse_cmdline_args(int argc, char* argv[]) {
     int option = 0;
     static const struct option cmdLineOptions[] = {
-        {.name = "ConnectionType", .has_arg = required_argument, .flag = NULL, .val = 'c'},
         {.name = "ScopeID", .has_arg = required_argument, .flag = NULL, .val = 's'},
-        {.name = "Hostname", .has_arg = required_argument, .flag = NULL, .val = 'h'},
-        {.name = "IoTEdgeRootCAPath", .has_arg = required_argument, .flag = NULL, .val = 'i'},
         {.name = NULL, .has_arg = 0, .flag = NULL, .val = 0} };
 
     // Loop over all of the options.
-    while ((option = getopt_long(argc, argv, "c:s:h:i:", cmdLineOptions, NULL)) != -1) {
+    while ((option = getopt_long(argc, argv, "s:", cmdLineOptions, NULL)) != -1) {
         // Check if arguments are missing. Every option requires an argument.
         if (optarg != NULL && optarg[0] == '-') {
             Log_Debug("WARNING: Option %c requires an argument\n", option);
             continue;
         }
         switch (option) {
-        case 'c':
-            Log_Debug("ConnectionType: %s\n", optarg);
-            if (strcmp(optarg, "DPS") == 0) {
-                connection_type = connection_type_dps;
-            }
-            else if (strcmp(optarg, "Direct") == 0) {
-                connection_type = connection_type_direct;
-            }
-            else if (strcmp(optarg, "IoTEdge") == 0) {
-                connection_type = connection_type_iotedge;
-            }
-            break;
         case 's':
             Log_Debug("ScopeID: %s\n", optarg);
             scope_id = optarg;
-            break;
-        case 'h':
-            Log_Debug("Hostname: %s\n", optarg);
-            hostname = optarg;
-            break;
-        case 'i':
-            Log_Debug("IoTEdgeRootCAPath: %s\n", optarg);
-            iotedge_root_ca_path = optarg;
             break;
         default:
             // Unknown options are ignored.
@@ -147,17 +100,12 @@ static void parse_cmdline_args(int argc, char* argv[]) {
 static ExitCode validate_user_configuration(void) {
     ExitCode validation_exit_code = ExitCode_Success;
 
-    if (connection_type != connection_type_dps) {
-        Log_Debug("The app only support DPS connection!\r\n");
-        validation_exit_code = ExitCode_Validate_ConnectionType;
-    }
-
     if (scope_id == NULL) {
         validation_exit_code = ExitCode_Validate_ScopeId;
-        Log_Debug("scope id is NULL!\r\n");
+        Log_Debug("Scope ID is NULL!\n");
     }
     else {
-        Log_Debug("Using DPS Connection: Azure IoT DPS Scope ID %s\n", scope_id);
+        Log_Debug("Using Scope ID %s\n", scope_id);
     }
 
     return validation_exit_code;
@@ -179,7 +127,7 @@ static void send_simulated_telemetry(void) {
     IotclMessageHandle msg_hndl = iotcl_telemetry_v2_create();
 
     if (msg_hndl == NULL) {
-        Log_Debug("Unable to create V2 telemetry message!\r\n");
+        Log_Debug("Unable to create V2 telemetry message!\n");
         return;
     }
 
@@ -197,7 +145,7 @@ static void send_simulated_telemetry(void) {
     const char* p_msg = iotcl_create_serialized_string(msg_hndl, false);
 
     if (p_msg == NULL) {
-        Log_Debug("Unable to get serialized string!\r\n");
+        Log_Debug("Unable to get serialized string!\n");
     } else {
         Log_Debug("Send telemetry: Temperature %0.1f, Humidity %0.2f\n",
             temperature, humidity);
@@ -231,7 +179,7 @@ static void app_timer_handler(EventLoopTimer* timer) {
     }
     if (duration_count >= stay_connected_duration_s) {
         //Times up. Stop sending.
-        exit_code = ExitCode_TermHandler_SigTerm;
+        exit_code = ExitCode_App_Exit;
     }
 }
 
@@ -313,17 +261,23 @@ int main(int argc, char *argv[]) {
 
     // Main loop
     while (exit_code == ExitCode_Success) {
-        EventLoop_Run_Result result = EventLoop_Run(app_evt_loop, 50, true);
+        EventLoop_Run_Result app_evt_loop_result = EventLoop_Run(app_evt_loop, 50, true);
         // Continue if interrupted by signal, e.g. due to breakpoint being set.
-        if (result == EventLoop_Run_Failed && errno != EINTR) {
+        if (app_evt_loop_result == EventLoop_Run_Failed && errno != EINTR) {
+            Log_Debug("ERROR: Application event loop returns EventLoop_Run_Failed!\n");
             exit_code = ExitCode_Main_EventLoopFail;
         }
-        if (iotconnect_sdk_poll(50) != IOTC_SDK_SUCCESS) {
+        unsigned int iotc_poll_result = iotconnect_sdk_poll(50);
+        if (iotc_poll_result != IOTC_SDK_SUCCESS) {
+            Log_Debug("ERROR: iotconnect_sdk_poll() returns %d!\n", iotc_poll_result);
             exit_code = ExitCode_IotConnect_Sdk_EventLoopFail;
         }
     }
+    if (exit_code == ExitCode_App_Exit) {
+        exit_code = ExitCode_Success;
+    }
     close_peripherals_and_handlers();
-    Log_Debug("Application exiting.\n");
+    Log_Debug("Application exiting. (exit code %d)\n", exit_code);
     return exit_code;
 }
 

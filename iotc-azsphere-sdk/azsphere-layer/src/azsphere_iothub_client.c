@@ -52,9 +52,9 @@ static void iothub_poll_handler(void* p_ctx);
 /******************************************************/
 /* Static definition                                  */
 /******************************************************/
-#define MAX_TIMERS                          3 + 1
+#define MAX_TIMERS                          (3 + 1)
 #define IOTHUB_POLL_INTERVAL_S              5
-#define MAX_DEVICE_TWIN_PAYLOAD_SIZE        512
+#define MAX_DEVICE_TWIN_PAYLOAD_SIZE        (8 * 1024)
 
 /******************************************************/
 /* Member variables declaration                       */
@@ -70,7 +70,7 @@ static bool m_initialized = false;
 /* Helper functions definition                        */
 /******************************************************/
 static char *print_provisioning_result_string(AZURE_SPHERE_PROV_RETURN_VALUE res) {
-    static char* res_str = "unknown";
+    char* res_str = "unknown";
     switch (res.result) {
         case AZURE_SPHERE_PROV_RESULT_OK:
             res_str = "OK";
@@ -98,7 +98,7 @@ static char *print_provisioning_result_string(AZURE_SPHERE_PROV_RETURN_VALUE res
 }
 
 static char* print_connection_status_string(IOTHUB_CLIENT_CONNECTION_STATUS_REASON res) {
-    static char* res_str = "unknown";
+    char* res_str = "unknown";
     switch (res) {
     case IOTHUB_CLIENT_CONNECTION_EXPIRED_SAS_TOKEN:
         res_str = "SAS token expired";
@@ -130,8 +130,8 @@ static char* print_connection_status_string(IOTHUB_CLIENT_CONNECTION_STATUS_REAS
 
 static void user_timer_cb(EventLoop* el, int fd, EventLoop_IoEvents events, void* context) {
     int idx = (int)context;
-    uint64_t timerData = 0;
-    if (read(fd, &timerData, sizeof(timerData)) == -1) {
+    uint64_t timer_data = 0;
+    if (read(fd, &timer_data, sizeof(timer_data)) == -1) {
         Log_Debug("ERROR: Could not read timerfd %s (%d).\n", strerror(errno), errno);
         return;
     }
@@ -154,9 +154,9 @@ static int add_timer(int interval_s, IotHubTimerCallback timer_cb, void* p_ctx,
                 return 0;
             }
             struct timespec ts = { .tv_sec = interval_s, .tv_nsec = 0 };
-            struct itimerspec newValue = { .it_value = ts,
+            struct itimerspec new_value = { .it_value = ts,
                                           .it_interval = ts };
-            if (timerfd_settime(m_timer_ctx[i].timer_fd, 0, &newValue, NULL) == -1) {
+            if (timerfd_settime(m_timer_ctx[i].timer_fd, 0, &new_value, NULL) == -1) {
                 Log_Debug("ERROR: Could not set timer period: %s (%d).\n",
                     strerror(errno), errno);
                 return 0;
@@ -209,9 +209,9 @@ static bool set_timer_interval(int timer_handle, int interval_s, bool internal_u
     }
     if (m_timer_ctx[idx].used) {
         struct timespec ts = { .tv_sec = interval_s, .tv_nsec = 0 };
-        struct itimerspec newValue = { .it_value = ts,
+        struct itimerspec new_value = { .it_value = ts,
                                       .it_interval = ts };
-        if (timerfd_settime(m_timer_ctx[idx].timer_fd, 0, &newValue, NULL) == -1) {
+        if (timerfd_settime(m_timer_ctx[idx].timer_fd, 0, &new_value, NULL) == -1) {
             Log_Debug("ERROR: Could not set timer period: %s (%d).\n",
                 strerror(errno), errno);
             return false;
@@ -367,9 +367,11 @@ handler_end:
 IotHubClientReturnCode iothub_client_init(IotHubClientInit *p_init) {
 
     if (m_initialized) {
+        Log_Debug("ERROR: IoTHub client already initialized!\n");
         return CodeInvalidState;
     }
     if (!p_init) {
+        Log_Debug("ERROR: p_init is NULL!\n");
         return CodeInvalidParam;
     }
     memcpy(&m_init, p_init, sizeof(IotHubClientInit));
@@ -378,6 +380,7 @@ IotHubClientReturnCode iothub_client_init(IotHubClientInit *p_init) {
     }
     m_evt_loop = EventLoop_Create();
     if (m_evt_loop == NULL) {
+        Log_Debug("ERROR: Unable to create event loop!\n");
         return CodeResourceNotAvailable;
     }
     for (int i = 0; i < M_ARRAY_SIZE(m_timer_ctx); i++)    {
@@ -388,11 +391,13 @@ IotHubClientReturnCode iothub_client_init(IotHubClientInit *p_init) {
 }
 
 IotHubClientReturnCode iothub_client_connect(void) {
-    if (!m_initialized || (m_auth_status == StatusAuthenticated)) {
+    if (!m_initialized) {
+        Log_Debug("ERROR: IoTHub client not initialize!\n");
         return CodeInvalidState;
     }
-    if (m_evt_loop == NULL)    {
-        return CodeResourceNotAvailable;
+    if (m_auth_status == StatusAuthenticated) {
+    Log_Debug("ERROR: IoTHub client already connected!\n");
+    return CodeInvalidState;
     }
     if (m_timer_ctx[0].used) {
         M_SET_TIMER_INTERVAL(1);
@@ -405,7 +410,12 @@ IotHubClientReturnCode iothub_client_connect(void) {
 IotHubClientReturnCode iothub_client_send_message(const char* p_msg,
     const char* p_content_type, const char* p_content_encoding) {
     IOTHUB_MESSAGE_HANDLE msg_handle;
-    if (!m_initialized || (m_auth_status != StatusAuthenticated)) {
+    if (!m_initialized) {
+        Log_Debug("ERROR: IoTHub client not initialize!\n");
+        return CodeInvalidState;
+    }
+    if (m_auth_status != StatusAuthenticated) {
+        Log_Debug("ERROR: IoTHub client not connected!\n");
         return CodeInvalidState;
     }
     //Log_Debug("msg => %s\n", p_msg);
@@ -427,7 +437,8 @@ IotHubClientReturnCode iothub_client_send_message(const char* p_msg,
 }
 
 IotHubClientReturnCode iothub_client_run(int timeout_ms) {
-    if (!m_initialized || (m_evt_loop == NULL)) {
+    if (!m_initialized) {
+        Log_Debug("ERROR: IoTHub client not initialize!\n");
         return CodeInvalidState;
     } else {
         EventLoop_Run_Result result = EventLoop_Run(m_evt_loop, timeout_ms, true);
@@ -444,6 +455,7 @@ IotHubClientReturnCode iothub_client_run(int timeout_ms) {
 
 IotHubClientReturnCode iothub_client_disconnect(void) {
     if (!m_initialized) {
+        Log_Debug("ERROR: IoTHub client not initialize!\n");
         return CodeInvalidState;
     }
     if (m_client_handle) {
@@ -457,10 +469,12 @@ IotHubClientReturnCode iothub_client_disconnect(void) {
 IotHubClientReturnCode iothub_client_add_timer(int interval_s, IotHubTimerCallback timer_cb,
     void *p_ctx, int *p_timer_handle) {
     if (!m_initialized) {
+        Log_Debug("ERROR: IoTHub client not initialize!\n");
         return CodeInvalidState;
     }
     int hndl = add_timer(interval_s, timer_cb, p_ctx, false);
     if (hndl == 0) {
+        Log_Debug("ERROR: Unable to add timer!\n");
         return CodeResourceNotAvailable;
     }
     *p_timer_handle = hndl;
@@ -469,10 +483,12 @@ IotHubClientReturnCode iothub_client_add_timer(int interval_s, IotHubTimerCallba
 
 IotHubClientReturnCode iothub_client_get_timer_interval(int timer_handle, int *p_interval) {
     if (!m_initialized) {
+        Log_Debug("ERROR: IoTHub client not initialize!\n");
         return CodeInvalidState;
     }
     int interval = get_timer_interval(timer_handle, false);
     if (interval == -1) {
+        Log_Debug("ERROR: Unable to get timer interval for handle %d!\n", timer_handle);
         return CodeResourceNotAvailable;
     }
     *p_interval = interval;
@@ -481,9 +497,11 @@ IotHubClientReturnCode iothub_client_get_timer_interval(int timer_handle, int *p
 
 IotHubClientReturnCode iothub_client_set_timer_interval(int timer_handle, int interval_s) {
     if (!m_initialized) {
+        Log_Debug("ERROR: IoTHub client not initialize!\n");
         return CodeInvalidState;
     }
     if (set_timer_interval(timer_handle, interval_s, false) == false) {
+        Log_Debug("ERROR: Unable to set timer interval for handle %d!\n", timer_handle);
         return CodeResourceNotAvailable;
     }
     return CodeSuccess;
@@ -491,6 +509,7 @@ IotHubClientReturnCode iothub_client_set_timer_interval(int timer_handle, int in
 
 IotHubClientReturnCode iothub_client_delete_timer(int timer_handle) {
     if (!m_initialized) {
+        Log_Debug("ERROR: IoTHub client not initialize!\n");
         return CodeInvalidState;
     }
     delete_timer(timer_handle, false);
@@ -498,7 +517,12 @@ IotHubClientReturnCode iothub_client_delete_timer(int timer_handle) {
 }
 
 IotHubClientReturnCode iothub_client_uninit(void) {
-    if (!m_initialized || m_client_handle) {
+    if (!m_initialized) {
+        Log_Debug("ERROR: IoTHub client not initialize!\n");
+        return CodeInvalidState;
+    }
+    if (m_client_handle) {
+        Log_Debug("ERROR: IoTHub client handle is not NULL!\n");
         return CodeInvalidState;
     }
     if (m_evt_loop) {

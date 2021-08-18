@@ -10,6 +10,7 @@ typedef enum {
 
     ExitCode_Success = 0,
     ExitCode_TermHandler_SigTerm = 1,
+    ExitCode_App_Exit = 2,
 
     ExitCode_Validate_ConnectionType = 20,
     ExitCode_Validate_ScopeId = 21,
