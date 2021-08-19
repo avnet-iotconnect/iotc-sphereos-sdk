@@ -137,11 +137,6 @@ static void on_hello_response(IotclEventData data, IotclEventType type) {
 void iotconnect_sdk_disconnect() {
     Log_Debug("Disconnecting...\n");
     iothub_client_disconnect();
-    if (iotconnect_connected && config.status_cb) {
-        config.status_cb(IOTCONNECT_DISCONNECTED);
-    }
-    iothub_authenticated = false;
-    iotconnect_connected = false;
 }
 
 void iotconnect_sdk_send_packet(const char *data) {
