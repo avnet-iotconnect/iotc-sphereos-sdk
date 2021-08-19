@@ -65,6 +65,7 @@ static EventLoop* m_evt_loop = NULL;
 static IotHubAuthenticateStatus m_auth_status = StatusNotAuthenticated;
 static TimerContext m_timer_ctx[MAX_TIMERS];
 static bool m_initialized = false;
+static bool m_disconnect_pending = false;
 
 /******************************************************/
 /* Helper functions definition                        */
@@ -440,15 +441,23 @@ IotHubClientReturnCode iothub_client_run(int timeout_ms) {
     if (!m_initialized) {
         Log_Debug("ERROR: IoTHub client not initialize!\n");
         return CodeInvalidState;
-    } else {
-        EventLoop_Run_Result result = EventLoop_Run(m_evt_loop, timeout_ms, true);
-        // Continue if interrupted by signal, e.g. due to breakpoint being set.
-        if (result == EventLoop_Run_Failed && errno != EINTR) {
-            return CodeRunFailed;
-        }
+    }
+    EventLoop_Run_Result result = EventLoop_Run(m_evt_loop, timeout_ms, true);
+    // Continue if interrupted by signal, e.g. due to breakpoint being set.
+    if (result == EventLoop_Run_Failed && errno != EINTR) {
+        return CodeRunFailed;
     }
     if (m_client_handle != NULL) {
         IoTHubDeviceClient_LL_DoWork(m_client_handle);
+        if (m_disconnect_pending) {
+            m_disconnect_pending = false;
+            IoTHubDeviceClient_LL_Destroy(m_client_handle);
+            m_client_handle = NULL;
+            m_auth_status = StatusNotAuthenticated;
+            if (m_init.auth_status_cb) {
+                m_init.auth_status_cb(m_auth_status);
+            }
+        }
     }
     return CodeSuccess;
 }
@@ -459,9 +468,7 @@ IotHubClientReturnCode iothub_client_disconnect(void) {
         return CodeInvalidState;
     }
     if (m_client_handle) {
-        IoTHubDeviceClient_LL_Destroy(m_client_handle);
-        m_client_handle = NULL;
-        m_auth_status = StatusNotAuthenticated;
+        m_disconnect_pending = true;
     }
     return CodeSuccess;
 }
