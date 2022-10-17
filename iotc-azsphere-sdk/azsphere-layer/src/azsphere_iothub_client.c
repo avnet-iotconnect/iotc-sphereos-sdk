@@ -190,7 +190,7 @@ static int get_timer_interval(int timer_handle, bool internal_use) {
     int idx = timer_handle - 1;
     if (internal_use) {
         idx = 0;
-    } else if ((idx <= 0) || (idx > M_ARRAY_SIZE(m_timer_ctx))) {
+    } else if ((idx <= 0) || (idx >= M_ARRAY_SIZE(m_timer_ctx))) {
         Log_Debug("Invalid timer_handle!\n");
         return -1;
     }
@@ -204,7 +204,7 @@ static bool set_timer_interval(int timer_handle, int interval_s, bool internal_u
     int idx = timer_handle - 1;
     if (internal_use) {
         idx = 0;
-    } else if ((idx <= 0) || (idx > M_ARRAY_SIZE(m_timer_ctx))) {
+    } else if ((idx <= 0) || (idx >= M_ARRAY_SIZE(m_timer_ctx))) {
         Log_Debug("Invalid timer_handle!\n");
         return false;
     }
@@ -227,7 +227,7 @@ static void delete_timer(int timer_handle, bool internal_use) {
     int idx = timer_handle - 1;
     if (internal_use) {
         idx = 0;
-    } else if ((idx <= 0) || (idx > M_ARRAY_SIZE(m_timer_ctx))) {
+    } else if ((idx <= 0) || (idx >= M_ARRAY_SIZE(m_timer_ctx))) {
         Log_Debug("Invalid timer_handle!\n");
         return;
     }
